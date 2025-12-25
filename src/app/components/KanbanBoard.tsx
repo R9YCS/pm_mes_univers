@@ -40,16 +40,23 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange }) => {
       isDragging: monitor.isDragging()
     })
   });
-
+  
+  // Получаем имя клиента из связанных данных
   const getClientName = () => {
-    // Проверяем все возможные варианты структуры данных
-    if (order.client_full_name) return order.client_full_name;
-    if (order.client_company) return order.client_company;
-    if (order.client?.full_name) return order.client.full_name;
-    if (order.client?.company_name) return order.client.company_name;
+    if (order.client) {
+      // Если данные клиента пришли с JOIN
+      return order.client.full_name || order.client.company_name || 'Неизвестный клиент';
+    }
+    
+    // Если в orders нет client объекта, но есть client_id
+    if (order.client_id) {
+      // Можно добавить поиск в списке clients, если он передан
+      return `Клиент #${order.client_id}`;
+    }
+    
     return 'Неизвестный клиент';
   };
-  
+
   const clientName = getClientName();
   const printerName = order.printer?.name;
   const urgency = order.urgency || 'normal';
