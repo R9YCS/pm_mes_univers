@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
-import { Client, ClientType } from '../data/mockData';
 import { Input } from './ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
@@ -12,35 +10,32 @@ import { Search, Plus, Building2, User, Mail, Phone, Calendar, Package } from 'l
 import { toast } from 'sonner';
 
 interface ClientsDatabaseProps {
-  clients: Client[];
-  onUpdateClient: (clientId: string, updates: Partial<Client>) => void;
-  onCreateClient: (client: Omit<Client, 'id'>) => void;
+  clients: any[];
+  onUpdateClient: (clientId: number, updates: any) => void;
+  onCreateClient: (client: any) => void;
 }
 
 const ClientDetailsDialog: React.FC<{
-  client: Client | null;
+  client: any | null;
   open: boolean;
   onClose: () => void;
-  onSave: (clientId: string, updates: Partial<Client>) => void;
+  onSave: (clientId: number, updates: any) => void;
   isNew?: boolean;
-  onCreate?: (client: Omit<Client, 'id'>) => void;
+  onCreate?: (client: any) => void;
 }> = ({ client, open, onClose, onSave, isNew = false, onCreate }) => {
-  const [formData, setFormData] = useState<Partial<Client>>({});
+  const [formData, setFormData] = useState<any>({});
 
   React.useEffect(() => {
     if (client) {
       setFormData(client);
     } else if (isNew) {
       setFormData({
-        name: '',
-        type: 'individual',
-        phone: '',
+        full_name: '',
+        company_name: '',
         email: '',
-        completedOrders: 0,
-        lastOrderDate: new Date().toISOString().split('T')[0],
-        preferredMaterials: [],
-        preferredColors: [],
-        notes: ''
+        phone: '',
+        notes: '',
+        is_active: true
       });
     }
   }, [client, isNew]);
@@ -48,17 +43,18 @@ const ClientDetailsDialog: React.FC<{
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.phone || !formData.email) {
-      toast.error('Заполните обязательные поля');
+    if (!formData.full_name && !formData.company_name) {
+      toast.error('Укажите ФИО или название компании');
       return;
     }
 
     if (isNew && onCreate) {
-      onCreate(formData as Omit<Client, 'id'>);
-      toast.success('Клиент успешно создан');
+      onCreate({
+        ...formData,
+        type: 'client'
+      });
     } else if (client) {
       onSave(client.id, formData);
-      toast.success('Данные клиента обновлены');
     }
     onClose();
   };
@@ -68,39 +64,33 @@ const ClientDetailsDialog: React.FC<{
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {isNew ? 'Создание нового клиента' : `Клиент: ${client?.name}`}
+            {isNew ? 'Создание нового клиента' : `Клиент: ${client?.full_name || client?.company_name}`}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2 col-span-2">
-              <Label htmlFor="name">ФИО / Название компании *</Label>
+            <div className="space-y-2">
+              <Label htmlFor="full_name">ФИО</Label>
               <Input 
-                id="name"
-                value={formData.name || ''}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Иванов Иван Иванович или ООО «Компания»"
+                id="full_name"
+                value={formData.full_name || ''}
+                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                placeholder="Иванов Иван Иванович"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="type">Тип клиента</Label>
-              <Select 
-                value={formData.type} 
-                onValueChange={(value: ClientType) => setFormData({ ...formData, type: value })}
-              >
-                <SelectTrigger id="type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="individual">Физическое лицо</SelectItem>
-                  <SelectItem value="company">Юридическое лицо</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="company_name">Название компании</Label>
+              <Input 
+                id="company_name"
+                value={formData.company_name || ''}
+                onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                placeholder="ООО «Компания»"
+              />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="phone">Телефон *</Label>
+              <Label htmlFor="phone">Телефон</Label>
               <Input 
                 id="phone"
                 value={formData.phone || ''}
@@ -109,40 +99,14 @@ const ClientDetailsDialog: React.FC<{
               />
             </div>
 
-            <div className="space-y-2 col-span-2">
-              <Label htmlFor="email">Email *</Label>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
               <Input 
                 id="email"
                 type="email"
                 value={formData.email || ''}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="example@mail.ru"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="materials">Предпочитаемые материалы</Label>
-              <Input 
-                id="materials"
-                value={formData.preferredMaterials?.join(', ') || ''}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
-                  preferredMaterials: e.target.value.split(',').map(m => m.trim()).filter(Boolean)
-                })}
-                placeholder="PLA, ABS, Resin..."
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="colors">Предпочитаемые цвета</Label>
-              <Input 
-                id="colors"
-                value={formData.preferredColors?.join(', ') || ''}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
-                  preferredColors: e.target.value.split(',').map(c => c.trim()).filter(Boolean)
-                })}
-                placeholder="Черный, Белый, Синий..."
               />
             </div>
 
@@ -157,21 +121,6 @@ const ClientDetailsDialog: React.FC<{
               />
             </div>
           </div>
-
-          {!isNew && client && (
-            <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
-              <div>
-                <p className="text-sm text-gray-600">Выполнено заказов</p>
-                <p className="text-xl">{client.completedOrders}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Последний заказ</p>
-                <p className="text-xl">
-                  {new Date(client.lastOrderDate).toLocaleDateString('ru-RU')}
-                </p>
-              </div>
-            </div>
-          )}
 
           <div className="flex justify-end gap-2 pt-4">
             <Button type="button" variant="outline" onClick={onClose}>
@@ -193,26 +142,24 @@ export const ClientsDatabase: React.FC<ClientsDatabaseProps> = ({
   onCreateClient
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState<ClientType | 'all'>('all');
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [selectedClient, setSelectedClient] = useState<any | null>(null);
   const [showNewClientDialog, setShowNewClientDialog] = useState(false);
 
   const filteredClients = clients.filter(client => {
     const matchesSearch = 
-      client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.phone.includes(searchTerm) ||
-      client.email.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesType = typeFilter === 'all' || client.type === typeFilter;
+      client.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      client.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      client.phone?.includes(searchTerm) ||
+      client.email?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    return matchesSearch && matchesType;
+    return matchesSearch;
   });
 
   const stats = {
     total: clients.length,
-    companies: clients.filter(c => c.type === 'company').length,
-    individuals: clients.filter(c => c.type === 'individual').length,
-    totalOrders: clients.reduce((sum, c) => sum + c.completedOrders, 0)
+    companies: clients.filter(c => c.company_name).length,
+    individuals: clients.filter(c => c.full_name && !c.company_name).length,
+    active: clients.filter(c => c.is_active).length
   };
 
   return (
@@ -229,7 +176,7 @@ export const ClientsDatabase: React.FC<ClientsDatabaseProps> = ({
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <div className="flex items-center gap-2 mb-2">
             <Building2 className="w-4 h-4 text-blue-600" />
-            <p className="text-sm text-blue-700">Юр. лица</p>
+            <p className="text-sm text-blue-700">Компании</p>
           </div>
           <p className="text-2xl text-blue-700">{stats.companies}</p>
         </div>
@@ -243,9 +190,9 @@ export const ClientsDatabase: React.FC<ClientsDatabaseProps> = ({
         <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
           <div className="flex items-center gap-2 mb-2">
             <Package className="w-4 h-4 text-purple-600" />
-            <p className="text-sm text-purple-700">Всего заказов</p>
+            <p className="text-sm text-purple-700">Активных</p>
           </div>
-          <p className="text-2xl text-purple-700">{stats.totalOrders}</p>
+          <p className="text-2xl text-purple-700">{stats.active}</p>
         </div>
       </div>
 
@@ -261,17 +208,6 @@ export const ClientsDatabase: React.FC<ClientsDatabaseProps> = ({
               className="pl-10"
             />
           </div>
-
-          <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as ClientType | 'all')}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Все типы" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Все типы</SelectItem>
-              <SelectItem value="individual">Физические лица</SelectItem>
-              <SelectItem value="company">Юридические лица</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
 
         <Button className="gap-2" onClick={() => setShowNewClientDialog(true)}>
@@ -286,10 +222,9 @@ export const ClientsDatabase: React.FC<ClientsDatabaseProps> = ({
           <TableHeader>
             <TableRow>
               <TableHead>ФИО / Название</TableHead>
-              <TableHead>Тип</TableHead>
               <TableHead>Контакты</TableHead>
-              <TableHead>Заказов</TableHead>
-              <TableHead>Последний заказ</TableHead>
+              <TableHead>Статус</TableHead>
+              <TableHead>Дата создания</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -301,37 +236,47 @@ export const ClientsDatabase: React.FC<ClientsDatabaseProps> = ({
               >
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    {client.type === 'company' ? (
+                    {client.company_name ? (
                       <Building2 className="w-4 h-4 text-blue-600" />
                     ) : (
                       <User className="w-4 h-4 text-gray-600" />
                     )}
-                    <span>{client.name}</span>
+                    <div>
+                      <div>{client.full_name || client.company_name}</div>
+                      {client.full_name && client.company_name && (
+                        <div className="text-sm text-gray-500">{client.company_name}</div>
+                      )}
+                    </div>
                   </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={client.type === 'company' ? 'default' : 'secondary'}>
-                    {client.type === 'company' ? 'Юр. лицо' : 'Физ. лицо'}
-                  </Badge>
                 </TableCell>
                 <TableCell>
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Phone className="w-3 h-3 text-gray-400" />
-                      <span>{client.phone}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Mail className="w-3 h-3 text-gray-400" />
-                      <span>{client.email}</span>
-                    </div>
+                    {client.phone && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Phone className="w-3 h-3 text-gray-400" />
+                        <span>{client.phone}</span>
+                      </div>
+                    )}
+                    {client.email && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Mail className="w-3 h-3 text-gray-400" />
+                        <span>{client.email}</span>
+                      </div>
+                    )}
                   </div>
                 </TableCell>
-                <TableCell>{client.completedOrders}</TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-gray-400" />
-                    {new Date(client.lastOrderDate).toLocaleDateString('ru-RU')}
-                  </div>
+                  <Badge variant={client.is_active ? 'default' : 'secondary'}>
+                    {client.is_active ? 'Активен' : 'Неактивен'}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  {client.created_at && (
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-gray-400" />
+                      {new Date(client.created_at).toLocaleDateString('ru-RU')}
+                    </div>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

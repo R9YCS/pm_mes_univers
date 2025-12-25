@@ -1,57 +1,49 @@
 import React, { useState } from 'react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { Order, OrderStatus, Priority } from '../data/mockData';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
-import { Plus, Search, Calendar, AlertCircle } from 'lucide-react';
+import { Plus, Search, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface KanbanBoardProps {
-  orders: Order[];
-  onUpdateOrder: (orderId: string, updates: Partial<Order>) => void;
-  onCreateOrder: (order: Omit<Order, 'id'>) => void;
-  clients: Array<{ id: string; name: string }>;
-  printers: Array<{ id: string; name: string }>;
+  orders: any[];
+  onUpdateOrder: (orderId: number, updates: any) => void;
+  onCreateOrder: (order: any) => void;
+  clients: any[];
+  printers: any[];
+  statuses: any[];
+  materials: any[];
 }
 
-const statusConfig: Record<OrderStatus, { label: string; color: string }> = {
-  new: { label: 'Новый', color: 'bg-blue-100 border-blue-300' },
-  printing: { label: 'В работе (3D-печать)', color: 'bg-yellow-100 border-yellow-300' },
-  postprocessing: { label: 'Постобработка', color: 'bg-purple-100 border-purple-300' },
-  ready: { label: 'Готов к выдаче', color: 'bg-green-100 border-green-300' },
-  completed: { label: 'Выполнен', color: 'bg-gray-100 border-gray-300' }
-};
-
-const priorityConfig: Record<Priority, { label: string; color: string }> = {
+const urgencyConfig: Record<string, { label: string; color: string }> = {
   low: { label: 'Низкая', color: 'bg-gray-500' },
-  medium: { label: 'Средняя', color: 'bg-blue-500' },
+  normal: { label: 'Средняя', color: 'bg-blue-500' },
   high: { label: 'Высокая', color: 'bg-orange-500' },
-  urgent: { label: 'Срочная', color: 'bg-red-500' }
+  critical: { label: 'Критическая', color: 'bg-red-500' }
 };
 
 interface OrderCardProps {
-  order: Order;
-  onStatusChange: (orderId: string, newStatus: OrderStatus) => void;
-  printers: Array<{ id: string; name: string }>;
+  order: any;
+  onStatusChange: (orderId: number, newStatusId: number) => void;
 }
 
-const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, printers }) => {
+const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange }) => {
   const [{ isDragging }, drag] = useDrag({
     type: 'order',
-    item: { id: order.id, currentStatus: order.status },
+    item: { id: order.id, currentStatusId: order.status_id },
     collect: (monitor) => ({
       isDragging: monitor.isDragging()
     })
   });
 
-  const printerName = order.printerId 
-    ? printers.find(p => p.id === order.printerId)?.name 
-    : null;
+  const clientName = order.client?.full_name || order.client?.company_name || 'Неизвестный клиент';
+  const printerName = order.printer?.name;
+  const urgency = order.urgency || 'normal';
 
   return (
     <div
@@ -61,22 +53,32 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, printers }
       }`}
     >
       <div className="flex items-start justify-between mb-2">
-        <span className="text-sm text-gray-600">{order.orderNumber}</span>
-        <div className={`w-3 h-3 rounded-full ${priorityConfig[order.priority].color}`} 
-             title={priorityConfig[order.priority].label} />
+        <span className="text-sm text-gray-600">{order.order_number}</span>
+        <div 
+          className={`w-3 h-3 rounded-full ${urgencyConfig[urgency].color}`} 
+          title={urgencyConfig[urgency].label} 
+        />
       </div>
       
-      <h4 className="mb-1">{order.clientName}</h4>
-      <p className="text-sm text-gray-600 mb-2">{order.modelName}</p>
+      <h4 className="mb-1">{clientName}</h4>
+      <p className="text-sm text-gray-600 mb-2">{order.name || 'Без названия'}</p>
       
-      <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-        <Calendar className="w-4 h-4" />
-        <span>{new Date(order.deadline).toLocaleDateString('ru-RU')}</span>
-      </div>
+      {order.deadline && (
+        <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
+          <Calendar className="w-4 h-4" />
+          <span>{new Date(order.deadline).toLocaleDateString('ru-RU')}</span>
+        </div>
+      )}
 
       {printerName && (
         <div className="mt-2 px-2 py-1 bg-blue-50 text-blue-700 text-sm rounded">
           {printerName}
+        </div>
+      )}
+
+      {order.material && (
+        <div className="mt-2 text-xs text-gray-500">
+          {order.material.name}
         </div>
       )}
     </div>
@@ -84,18 +86,17 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, printers }
 };
 
 interface ColumnProps {
-  status: OrderStatus;
-  orders: Order[];
-  onDrop: (orderId: string, newStatus: OrderStatus) => void;
-  printers: Array<{ id: string; name: string }>;
+  status: any;
+  orders: any[];
+  onDrop: (orderId: number, newStatusId: number) => void;
 }
 
-const Column: React.FC<ColumnProps> = ({ status, orders, onDrop, printers }) => {
+const Column: React.FC<ColumnProps> = ({ status, orders, onDrop }) => {
   const [{ isOver }, drop] = useDrop({
     accept: 'order',
-    drop: (item: { id: string; currentStatus: OrderStatus }) => {
-      if (item.currentStatus !== status) {
-        onDrop(item.id, status);
+    drop: (item: { id: number; currentStatusId: number }) => {
+      if (item.currentStatusId !== status.id) {
+        onDrop(item.id, status.id);
       }
     },
     collect: (monitor) => ({
@@ -103,15 +104,22 @@ const Column: React.FC<ColumnProps> = ({ status, orders, onDrop, printers }) => 
     })
   });
 
+  const bgColor = status.color ? `#${status.color.replace('#', '')}20` : '#f3f4f6';
+  const borderColor = status.color || '#d1d5db';
+
   return (
     <div
       ref={drop}
-      className={`flex-1 min-w-[280px] p-4 rounded-lg ${statusConfig[status].color} ${
+      className={`flex-1 min-w-[280px] p-4 rounded-lg border-2 ${
         isOver ? 'ring-2 ring-blue-500' : ''
       }`}
+      style={{ 
+        backgroundColor: bgColor,
+        borderColor: borderColor
+      }}
     >
       <div className="mb-4">
-        <h3 className="mb-1">{statusConfig[status].label}</h3>
+        <h3 className="mb-1">{status.name}</h3>
         <span className="text-sm text-gray-600">{orders.length} заказов</span>
       </div>
       
@@ -121,7 +129,6 @@ const Column: React.FC<ColumnProps> = ({ status, orders, onDrop, printers }) => 
             key={order.id} 
             order={order} 
             onStatusChange={onDrop}
-            printers={printers}
           />
         ))}
       </div>
@@ -130,115 +137,152 @@ const Column: React.FC<ColumnProps> = ({ status, orders, onDrop, printers }) => 
 };
 
 const NewOrderDialog: React.FC<{
-  clients: Array<{ id: string; name: string }>;
-  printers: Array<{ id: string; name: string }>;
-  onCreateOrder: (order: Omit<Order, 'id'>) => void;
-}> = ({ clients, printers, onCreateOrder }) => {
+  clients: any[];
+  printers: any[];
+  materials: any[];
+  statuses: any[];
+  onCreateOrder: (order: any) => void;
+}> = ({ clients, printers, materials, statuses, onCreateOrder }) => {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
-    clientId: '',
-    modelName: '',
-    priority: 'medium' as Priority,
+    client_id: '',
+    name: '',
+    description: '',
+    priority: 3,
+    urgency: 'normal',
+    material_id: '',
     deadline: '',
-    material: '',
-    color: '',
     notes: ''
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.clientId || !formData.modelName || !formData.deadline) {
+    if (!formData.client_id || !formData.name) {
       toast.error('Заполните обязательные поля');
       return;
     }
 
-    const client = clients.find(c => c.id === formData.clientId);
-    const orderNumber = `ORD-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
+    const newStatusId = statuses.find(s => s.code === 'new')?.id || statuses[0]?.id;
 
     onCreateOrder({
-      orderNumber,
-      clientId: formData.clientId,
-      clientName: client?.name || '',
-      status: 'new',
+      client_id: parseInt(formData.client_id),
+      status_id: newStatusId,
+      name: formData.name,
+      description: formData.description || undefined,
       priority: formData.priority,
-      modelName: formData.modelName,
-      deadline: formData.deadline,
-      material: formData.material || undefined,
-      color: formData.color || undefined,
-      notes: formData.notes || undefined,
-      createdAt: new Date().toISOString().split('T')[0]
+      urgency: formData.urgency,
+      material_id: formData.material_id ? parseInt(formData.material_id) : undefined,
+      deadline: formData.deadline || undefined,
+      notes: formData.notes || undefined
     });
 
-    toast.success('Заказ успешно создан');
     setOpen(false);
     setFormData({
-      clientId: '',
-      modelName: '',
-      priority: 'medium',
+      client_id: '',
+      name: '',
+      description: '',
+      priority: 3,
+      urgency: 'normal',
+      material_id: '',
       deadline: '',
-      material: '',
-      color: '',
       notes: ''
     });
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="gap-2">
-          <Plus className="w-4 h-4" />
-          Новый заказ
-        </Button>
-      </DialogTrigger>
+      <Button onClick={() => setOpen(true)} className="gap-2">
+        <Plus className="w-4 h-4" />
+        Новый заказ
+      </Button>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Создание нового заказа</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div className="space-y-2 col-span-2">
               <Label htmlFor="client">Клиент *</Label>
-              <Select value={formData.clientId} onValueChange={(value) => setFormData({ ...formData, clientId: value })}>
+              <Select value={formData.client_id} onValueChange={(value) => setFormData({ ...formData, client_id: value })}>
                 <SelectTrigger id="client">
                   <SelectValue placeholder="Выберите клиента" />
                 </SelectTrigger>
                 <SelectContent>
                   {clients.map(client => (
-                    <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
+                    <SelectItem key={client.id} value={String(client.id)}>
+                      {client.full_name || client.company_name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="name">Название заказа *</Label>
+              <Input 
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Корпус устройства"
+              />
+            </div>
+
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="description">Описание</Label>
+              <Textarea 
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Детальное описание заказа"
+                rows={2}
+              />
+            </div>
+
             <div className="space-y-2">
-              <Label htmlFor="priority">Приоритет</Label>
-              <Select value={formData.priority} onValueChange={(value: Priority) => setFormData({ ...formData, priority: value })}>
-                <SelectTrigger id="priority">
+              <Label htmlFor="priority">Приоритет (1-5)</Label>
+              <Input 
+                id="priority"
+                type="number"
+                min="1"
+                max="5"
+                value={formData.priority}
+                onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 3 })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="urgency">Срочность</Label>
+              <Select value={formData.urgency} onValueChange={(value) => setFormData({ ...formData, urgency: value })}>
+                <SelectTrigger id="urgency">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(priorityConfig).map(([key, config]) => (
+                  {Object.entries(urgencyConfig).map(([key, config]) => (
                     <SelectItem key={key} value={key}>{config.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="modelName">Название модели *</Label>
-            <Input 
-              id="modelName"
-              value={formData.modelName}
-              onChange={(e) => setFormData({ ...formData, modelName: e.target.value })}
-              placeholder="Название модели или детали"
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="deadline">Срок сдачи *</Label>
+              <Label htmlFor="material">Материал</Label>
+              <Select value={formData.material_id} onValueChange={(value) => setFormData({ ...formData, material_id: value })}>
+                <SelectTrigger id="material">
+                  <SelectValue placeholder="Выберите материал" />
+                </SelectTrigger>
+                <SelectContent>
+                  {materials.map(material => (
+                    <SelectItem key={material.id} value={String(material.id)}>
+                      {material.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="deadline">Срок сдачи</Label>
               <Input 
                 id="deadline"
                 type="date"
@@ -247,36 +291,16 @@ const NewOrderDialog: React.FC<{
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="material">Материал</Label>
-              <Input 
-                id="material"
-                value={formData.material}
-                onChange={(e) => setFormData({ ...formData, material: e.target.value })}
-                placeholder="PLA, ABS, Resin..."
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="notes">Примечания</Label>
+              <Textarea 
+                id="notes"
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                placeholder="Дополнительные требования"
+                rows={2}
               />
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="color">Цвет</Label>
-              <Input 
-                id="color"
-                value={formData.color}
-                onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                placeholder="Черный, Белый..."
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="notes">Примечания</Label>
-            <Textarea 
-              id="notes"
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              placeholder="Дополнительные требования и комментарии"
-              rows={3}
-            />
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
@@ -298,31 +322,31 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onUpdateOrder, 
   onCreateOrder,
   clients,
-  printers
+  printers,
+  statuses,
+  materials
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
-  const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [urgencyFilter, setUrgencyFilter] = useState<string>('all');
 
-  const handleDrop = (orderId: string, newStatus: OrderStatus) => {
-    onUpdateOrder(orderId, { status: newStatus });
-    toast.success('Статус заказа обновлен');
+  const handleDrop = (orderId: number, newStatusId: number) => {
+    onUpdateOrder(orderId, { status_id: newStatusId });
   };
 
   // Фильтрация заказов
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 
-      order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.modelName.toLowerCase().includes(searchTerm.toLowerCase());
+      order.order_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.client?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.client?.company_name?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-    const matchesPriority = priorityFilter === 'all' || order.priority === priorityFilter;
+    const matchesStatus = statusFilter === 'all' || String(order.status_id) === statusFilter;
+    const matchesUrgency = urgencyFilter === 'all' || order.urgency === urgencyFilter;
 
-    return matchesSearch && matchesStatus && matchesPriority;
+    return matchesSearch && matchesStatus && matchesUrgency;
   });
-
-  const statuses: OrderStatus[] = ['new', 'printing', 'postprocessing', 'ready', 'completed'];
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -333,34 +357,34 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
-                placeholder="Поиск по номеру, клиенту, модели..."
+                placeholder="Поиск по номеру, клиенту, названию..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
               />
             </div>
 
-            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as OrderStatus | 'all')}>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="Все статусы" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Все статусы</SelectItem>
                 {statuses.map(status => (
-                  <SelectItem key={status} value={status}>
-                    {statusConfig[status].label}
+                  <SelectItem key={status.id} value={String(status.id)}>
+                    {status.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
-            <Select value={priorityFilter} onValueChange={(value) => setPriorityFilter(value as Priority | 'all')}>
+            <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
               <SelectTrigger className="w-48">
-                <SelectValue placeholder="Все приоритеты" />
+                <SelectValue placeholder="Все срочности" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Все приоритеты</SelectItem>
-                {Object.entries(priorityConfig).map(([key, config]) => (
+                <SelectItem value="all">Все срочности</SelectItem>
+                {Object.entries(urgencyConfig).map(([key, config]) => (
                   <SelectItem key={key} value={key}>{config.label}</SelectItem>
                 ))}
               </SelectContent>
@@ -370,21 +394,24 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           <NewOrderDialog 
             clients={clients} 
             printers={printers}
+            materials={materials}
+            statuses={statuses}
             onCreateOrder={onCreateOrder}
           />
         </div>
 
         {/* Kanban доска */}
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {statuses.map(status => (
-            <Column
-              key={status}
-              status={status}
-              orders={filteredOrders.filter(order => order.status === status)}
-              onDrop={handleDrop}
-              printers={printers}
-            />
-          ))}
+          {statuses
+            .sort((a, b) => a.sort_order - b.sort_order)
+            .map(status => (
+              <Column
+                key={status.id}
+                status={status}
+                orders={filteredOrders.filter(order => order.status_id === status.id)}
+                onDrop={handleDrop}
+              />
+            ))}
         </div>
       </div>
     </DndProvider>

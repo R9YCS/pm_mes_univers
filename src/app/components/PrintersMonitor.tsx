@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Printer, PrinterStatus } from '../data/mockData';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
@@ -11,12 +10,12 @@ import { Printer as PrinterIcon, AlertCircle, CheckCircle, Clock, Wrench } from 
 import { toast } from 'sonner';
 
 interface PrintersMonitorProps {
-  printers: Printer[];
-  orders: Array<{ id: string; orderNumber: string }>;
-  onUpdatePrinter: (printerId: string, updates: Partial<Printer>) => void;
+  printers: any[];
+  orders: any[];
+  onUpdatePrinter: (printerId: number, updates: any) => void;
 }
 
-const statusConfig: Record<PrinterStatus, { 
+const statusConfig: Record<string, { 
   label: string; 
   color: string; 
   bgColor: string;
@@ -34,6 +33,12 @@ const statusConfig: Record<PrinterStatus, {
     bgColor: 'bg-gray-50 border-gray-200',
     icon: <Clock className="w-5 h-5 text-gray-600" />
   },
+  printing: {
+    label: 'Печать',
+    color: 'text-blue-700',
+    bgColor: 'bg-blue-50 border-blue-200',
+    icon: <PrinterIcon className="w-5 h-5 text-blue-600" />
+  },
   error: { 
     label: 'Ошибка', 
     color: 'text-red-700', 
@@ -45,17 +50,26 @@ const statusConfig: Record<PrinterStatus, {
     color: 'text-orange-700', 
     bgColor: 'bg-orange-50 border-orange-200',
     icon: <Wrench className="w-5 h-5 text-orange-600" />
+  },
+  offline: {
+    label: 'Отключен',
+    color: 'text-gray-500',
+    bgColor: 'bg-gray-100 border-gray-300',
+    icon: <AlertCircle className="w-5 h-5 text-gray-500" />
   }
 };
 
 interface PrinterCardProps {
-  printer: Printer;
-  currentOrder?: { id: string; orderNumber: string };
-  onEdit: (printer: Printer) => void;
+  printer: any;
+  currentOrder?: any;
+  onEdit: (printer: any) => void;
 }
 
 const PrinterCard: React.FC<PrinterCardProps> = ({ printer, currentOrder, onEdit }) => {
-  const config = statusConfig[printer.status];
+  const config = statusConfig[printer.status] || statusConfig.idle;
+  
+  // Вычисляем прогресс для принтеров в статусе printing
+  const progress = printer.status === 'printing' && currentOrder ? 50 : 0;
   
   return (
     <div 
@@ -67,7 +81,7 @@ const PrinterCard: React.FC<PrinterCardProps> = ({ printer, currentOrder, onEdit
           <PrinterIcon className="w-6 h-6 text-gray-700" />
           <div>
             <h3 className="mb-0.5">{printer.name}</h3>
-            <p className="text-sm text-gray-600">{printer.model}</p>
+            <p className="text-sm text-gray-600">{printer.model || 'N/A'}</p>
           </div>
         </div>
         {config.icon}
@@ -78,30 +92,32 @@ const PrinterCard: React.FC<PrinterCardProps> = ({ printer, currentOrder, onEdit
           <span className={`text-sm ${config.color}`}>{config.label}</span>
         </div>
 
-        {printer.status === 'working' && (
+        {printer.status === 'printing' && currentOrder && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-600">Прогресс</span>
-              <span>{printer.progress}%</span>
+              <span>{progress}%</span>
             </div>
-            <Progress value={printer.progress} className="h-2" />
-            {currentOrder && (
-              <p className="text-sm text-gray-600">
-                Заказ: {currentOrder.orderNumber}
-              </p>
-            )}
+            <Progress value={progress} className="h-2" />
+            <p className="text-sm text-gray-600">
+              Заказ: {currentOrder.order_number}
+            </p>
           </div>
         )}
 
         <div className="pt-3 border-t border-gray-200">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">Последнее ТО</span>
-            <span>{new Date(printer.lastMaintenance).toLocaleDateString('ru-RU')}</span>
-          </div>
-          <div className="flex items-center justify-between text-sm mt-1">
-            <span className="text-gray-600">Тип</span>
-            <Badge variant="outline">{printer.type}</Badge>
-          </div>
+          {printer.last_maintenance && (
+            <div className="flex items-center justify-between text-sm mb-1">
+              <span className="text-gray-600">Последнее ТО</span>
+              <span>{new Date(printer.last_maintenance).toLocaleDateString('ru-RU')}</span>
+            </div>
+          )}
+          {printer.location && (
+            <div className="flex items-center justify-between text-sm mt-1">
+              <span className="text-gray-600">Расположение</span>
+              <span>{printer.location}</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -109,19 +125,20 @@ const PrinterCard: React.FC<PrinterCardProps> = ({ printer, currentOrder, onEdit
 };
 
 const EditPrinterDialog: React.FC<{
-  printer: Printer | null;
+  printer: any | null;
   open: boolean;
   onClose: () => void;
-  onSave: (printerId: string, updates: Partial<Printer>) => void;
+  onSave: (printerId: number, updates: any) => void;
 }> = ({ printer, open, onClose, onSave }) => {
-  const [formData, setFormData] = useState<Partial<Printer>>({});
+  const [formData, setFormData] = useState<any>({});
 
   React.useEffect(() => {
     if (printer) {
       setFormData({
         status: printer.status,
-        progress: printer.progress,
-        lastMaintenance: printer.lastMaintenance
+        last_maintenance: printer.last_maintenance || '',
+        location: printer.location || '',
+        tech_notes: printer.tech_notes || ''
       });
     }
   }, [printer]);
@@ -130,7 +147,6 @@ const EditPrinterDialog: React.FC<{
     e.preventDefault();
     if (printer) {
       onSave(printer.id, formData);
-      toast.success('Данные принтера обновлены');
       onClose();
     }
   };
@@ -146,14 +162,14 @@ const EditPrinterDialog: React.FC<{
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label>Модель</Label>
-            <Input value={printer.model} disabled />
+            <Input value={printer.model || ''} disabled />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="status">Статус</Label>
+            <Label htmlFor="status">��татус</Label>
             <Select 
               value={formData.status} 
-              onValueChange={(value: PrinterStatus) => setFormData({ ...formData, status: value })}
+              onValueChange={(value) => setFormData({ ...formData, status: value })}
             >
               <SelectTrigger id="status">
                 <SelectValue />
@@ -166,27 +182,22 @@ const EditPrinterDialog: React.FC<{
             </Select>
           </div>
 
-          {formData.status === 'working' && (
-            <div className="space-y-2">
-              <Label htmlFor="progress">Прогресс (%)</Label>
-              <Input 
-                id="progress"
-                type="number"
-                min="0"
-                max="100"
-                value={formData.progress || 0}
-                onChange={(e) => setFormData({ ...formData, progress: parseInt(e.target.value) || 0 })}
-              />
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="location">Расположение</Label>
+            <Input 
+              id="location"
+              value={formData.location || ''}
+              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+            />
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="maintenance">Дата последнего ТО</Label>
             <Input 
               id="maintenance"
               type="date"
-              value={formData.lastMaintenance}
-              onChange={(e) => setFormData({ ...formData, lastMaintenance: e.target.value })}
+              value={formData.last_maintenance || ''}
+              onChange={(e) => setFormData({ ...formData, last_maintenance: e.target.value })}
             />
           </div>
 
@@ -209,8 +220,8 @@ export const PrintersMonitor: React.FC<PrintersMonitorProps> = ({
   orders,
   onUpdatePrinter 
 }) => {
-  const [statusFilter, setStatusFilter] = useState<PrinterStatus | 'all'>('all');
-  const [editingPrinter, setEditingPrinter] = useState<Printer | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [editingPrinter, setEditingPrinter] = useState<any | null>(null);
 
   const filteredPrinters = printers.filter(printer => 
     statusFilter === 'all' || printer.status === statusFilter
@@ -218,7 +229,7 @@ export const PrintersMonitor: React.FC<PrintersMonitorProps> = ({
 
   const stats = {
     total: printers.length,
-    working: printers.filter(p => p.status === 'working').length,
+    working: printers.filter(p => p.status === 'working' || p.status === 'printing').length,
     idle: printers.filter(p => p.status === 'idle').length,
     error: printers.filter(p => p.status === 'error').length,
     maintenance: printers.filter(p => p.status === 'maintenance').length
@@ -252,7 +263,7 @@ export const PrintersMonitor: React.FC<PrintersMonitorProps> = ({
 
       {/* Фильтр */}
       <div className="flex items-center gap-3">
-        <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as PrinterStatus | 'all')}>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-64">
             <SelectValue placeholder="Все статусы" />
           </SelectTrigger>
@@ -268,8 +279,8 @@ export const PrintersMonitor: React.FC<PrintersMonitorProps> = ({
       {/* Сетка принтеров */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredPrinters.map(printer => {
-          const currentOrder = printer.currentOrderId 
-            ? orders.find(o => o.id === printer.currentOrderId)
+          const currentOrder = printer.current_task_id 
+            ? orders.find(o => o.id === printer.current_task_id)
             : undefined;
           
           return (
