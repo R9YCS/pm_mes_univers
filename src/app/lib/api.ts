@@ -134,20 +134,58 @@ export const personsAPI = {
   },
 };
 
-// Printers API
-export const printersAPI = {
+// Printer Models API (новая таблица)
+export const printerModelsAPI = {
   getAll: () => {
-    return supabaseFetch('/printers?select=*&order=name');
+    return supabaseFetch('/printer_models?select=*&order=name');
   },
 
   getById: (id: number) => {
-    return supabaseFetch(`/printers?id=eq.${id}`);
+    return supabaseFetch(`/printer_models?id=eq.${id}`);
+  },
+
+  create: (data: any) => {
+    return supabaseFetch('/printer_models', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...data,
+        created_at: new Date().toISOString()
+      }),
+      headers: {
+        'Prefer': 'return=representation'
+      }
+    });
+  },
+
+  update: (id: number, data: any) => {
+    return supabaseFetch(`/printer_models?id=eq.${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+      headers: {
+        'Prefer': 'return=representation'
+      }
+    });
+  },
+};
+
+// Printers API (обновленная с связью с моделями)
+export const printersAPI = {
+  getAll: () => {
+    return supabaseFetch('/printers?select=*,printer_models(*)&order=name');
+  },
+
+  getById: (id: number) => {
+    return supabaseFetch(`/printers?select=*,printer_models(*)&id=eq.${id}`);
   },
 
   create: (data: any) => {
     return supabaseFetch('/printers', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        ...data,
+        created_at: new Date().toISOString(),
+        is_active: true
+      }),
       headers: {
         'Prefer': 'return=representation'
       }
@@ -162,6 +200,15 @@ export const printersAPI = {
         'Prefer': 'return=representation'
       }
     });
+  },
+
+  // Новые методы для работы с принтерами
+  getAvailable: () => {
+    return supabaseFetch('/printers?select=*,printer_models(*)&is_active=eq.true&status=eq.available&order=name');
+  },
+
+  getByModel: (modelId: number) => {
+    return supabaseFetch(`/printers?select=*,printer_models(*)&model_id=eq.${modelId}&order=name`);
   },
 };
 
@@ -205,16 +252,15 @@ export const materialsAPI = {
 
 // Orders API
 export const ordersAPI = {
-  getAll: () => { // джоин персон и заказов
-    return supabaseFetch('/orders?select=*,client:persons!client_id(full_name,company_name,email,phone)&order=created_at.desc');
+  getAll: () => {
+    return supabaseFetch('/orders?select=*,client:persons!client_id(full_name,company_name,email,phone),printer:printers!printer_id(name,printer_models(name))&order=created_at.desc');
   },
 
   getById: (id: number) => {
-    return supabaseFetch(`/orders?id=eq.${id}`);
+    return supabaseFetch(`/orders?select=*,client:persons!client_id(full_name,company_name,email,phone),printer:printers!printer_id(name,printer_models(name))&id=eq.${id}`);
   },
 
   create: (data: any) => {
-    // Генерация номера заказа
     const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     
     return supabaseFetch('/orders', {
@@ -240,12 +286,25 @@ export const ordersAPI = {
       }
     });
   },
+
+  // Новые методы для работы с заказами
+  getByStatus: (statusId: number) => {
+    return supabaseFetch(`/orders?select=*,client:persons!client_id(full_name,company_name,email,phone),printer:printers!printer_id(name,printer_models(name))&status_id=eq.${statusId}&order=created_at.desc`);
+  },
+
+  getByClient: (clientId: number) => {
+    return supabaseFetch(`/orders?select=*,client:persons!client_id(full_name,company_name,email,phone),printer:printers!printer_id(name,printer_models(name))&client_id=eq.${clientId}&order=created_at.desc`);
+  },
+
+  getByPrinter: (printerId: number) => {
+    return supabaseFetch(`/orders?select=*,client:persons!client_id(full_name,company_name,email,phone),printer:printers!printer_id(name,printer_models(name))&printer_id=eq.${printerId}&order=created_at.desc`);
+  },
 };
 
 // Order History API
 export const orderHistoryAPI = {
   getAll: (orderId?: number) => {
-    let endpoint = '/order_history?select=*&order=changed_at.desc';
+    let endpoint = '/order_history?select=*,changed_by:persons!changed_by(full_name)&order=changed_at.desc';
     if (orderId) {
       endpoint += `&order_id=eq.${orderId}`;
     }
@@ -253,17 +312,51 @@ export const orderHistoryAPI = {
   },
 };
 
-// Print Logs API
+// Print Logs API (обновленная с связью с принтерами и моделями)
 export const printLogsAPI = {
   getAll: () => {
-    return supabaseFetch('/print_logs?select=*&order=started_at.desc');
+    return supabaseFetch('/print_logs?select=*,printer:printers!printer_id(name,printer_models(name)),operator:persons!operator_id(full_name)&order=started_at.desc');
+  },
+
+  create: (data: any) => {
+    return supabaseFetch('/print_logs', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...data,
+        started_at: new Date().toISOString()
+      }),
+      headers: {
+        'Prefer': 'return=representation'
+      }
+    });
+  },
+
+  getByPrinter: (printerId: number) => {
+    return supabaseFetch(`/print_logs?select=*,printer:printers!printer_id(name,printer_models(name)),operator:persons!operator_id(full_name)&printer_id=eq.${printerId}&order=started_at.desc`);
   },
 };
 
-// Printer Maintenance API
+// Printer Maintenance API (обновленная с связью с принтерами и моделями)
 export const printerMaintenanceAPI = {
   getAll: () => {
-    return supabaseFetch('/printer_maintenance?select=*&order=performed_at.desc');
+    return supabaseFetch('/printer_maintenance?select=*,printer:printers!printer_id(name,printer_models(name)),technician:persons!technician_id(full_name)&order=performed_at.desc');
+  },
+
+  create: (data: any) => {
+    return supabaseFetch('/printer_maintenance', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...data,
+        performed_at: new Date().toISOString()
+      }),
+      headers: {
+        'Prefer': 'return=representation'
+      }
+    });
+  },
+
+  getByPrinter: (printerId: number) => {
+    return supabaseFetch(`/printer_maintenance?select=*,printer:printers!printer_id(name,printer_models(name)),technician:persons!technician_id(full_name)&printer_id=eq.${printerId}&order=performed_at.desc`);
   },
 };
 
@@ -271,6 +364,7 @@ export const printerMaintenanceAPI = {
 export const API = {
   auth: authAPI,
   persons: personsAPI,
+  printerModels: printerModelsAPI, // Добавлено
   printers: printersAPI,
   orders: ordersAPI,
   orderStatuses: orderStatusesAPI,
