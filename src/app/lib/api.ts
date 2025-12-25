@@ -1,5 +1,7 @@
 // API клиент для работы с backend
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+// import { projectId, publicAnonKey } from '../../utils/supabase/info';
+projectId = "rttikoxslnnifkizeref";
+publicAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0dGlrb3hzbG5uaWZraXplcmVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2NjQ5NDMsImV4cCI6MjA4MjI0MDk0M30.A9PbLqhQaTApNPB8tcFTX3Gn4thGSS1Ch_exqZy28fc";
 
 const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-ff36f543`;
 
