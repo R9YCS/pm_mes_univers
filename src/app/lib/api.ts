@@ -1,189 +1,283 @@
-// API клиент для работы с backend
-// import { projectId, publicAnonKey } from '/utils/supabase/info';
-let projectId = "rttikoxslnnifkizeref";
-let publicAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0dGlrb3hzbG5uaWZraXplcmVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2NjQ5NDMsImV4cCI6MjA4MjI0MDk0M30.A9PbLqhQaTApNPB8tcFTX3Gn4thGSS1Ch_exqZy28fc";
+// API клиент для работы с Supabase напрямую
+import { createClient } from '@supabase/supabase-js';
 
-const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-ff36f543`;
+// Конфигурация Supabase
+const supabaseUrl = 'https://rttikoxslnnifkizeref.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0dGlrb3hzbG5uaWZraXplcmVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2NjQ5NDMsImV4cCI6MjA4MjI0MDk0M30.A9PbLqhQaTApNPB8tcFTX3Gn4thGSS1Ch_exqZy28fc';
 
-// Получаем токен из localStorage - ДОБАВЬТЕ export
+// Создаем клиент Supabase
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Получаем токен из сессии Supabase
 export const getAuthToken = (): string | null => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('auth_token');
+    const session = supabase.auth.getSession();
+    return session?.data?.session?.access_token || null;
   }
   return null;
 };
 
-// Сохраняем токен
-export const setAuthToken = (token: string) => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('auth_token', token);
-  }
-};
-
-// Удаляем токен
-export const removeAuthToken = () => {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('auth_token');
-  }
-};
-
-// Базовый fetch с авторизацией
-const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
-  const token = getAuthToken();
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-  }
-
-  return response.json();
-};
-
-// Auth API
+// Auth API через Supabase
 export const authAPI = {
   signup: async (data: { email: string; password: string; full_name: string; type?: string }) => {
-    return apiFetch('/auth/signup', {
-      method: 'POST',
-      body: JSON.stringify(data),
+    const { data: authData, error } = await supabase.auth.signUp({
+      email: data.email,
+      password: data.password,
+      options: {
+        data: {
+          full_name: data.full_name,
+          type: data.type || 'employee'
+        }
+      }
     });
+    
+    if (error) throw error;
+    return authData;
   },
 
   signin: async (email: string, password: string) => {
-    const data = await apiFetch('/auth/signin', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
     });
     
-    if (data.session?.access_token) {
-      setAuthToken(data.session.access_token);
-    }
-    
+    if (error) throw error;
     return data;
   },
 
-  signout: () => {
-    removeAuthToken();
+  signout: async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   },
+
+  getSession: async () => {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    return data;
+  }
 };
 
-// Persons API
+// Persons API через Supabase
 export const personsAPI = {
   getAll: (type?: string) => {
-    const query = type ? `?type=${type}` : '';
-    return apiFetch(`/persons${query}`);
+    let query = supabase
+      .from('persons')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (type) {
+      query = query.eq('type', type);
+    }
+    
+    return query;
   },
 
   getById: (id: number) => {
-    return apiFetch(`/persons/${id}`);
+    return supabase
+      .from('persons')
+      .select('*')
+      .eq('id', id)
+      .single();
   },
 
   create: (data: any) => {
-    return apiFetch('/persons', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    return supabase
+      .from('persons')
+      .insert([{
+        ...data,
+        created_at: new Date().toISOString(),
+        is_active: true
+      }])
+      .select()
+      .single();
   },
 
   update: (id: number, data: any) => {
-    return apiFetch(`/persons/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
+    return supabase
+      .from('persons')
+      .update(data)
+      .eq('id', id)
+      .select()
+      .single();
   },
 };
 
-// Printers API
+// Printers API через Supabase
 export const printersAPI = {
   getAll: () => {
-    return apiFetch('/printers');
-  },
-
-  update: (id: number, data: any) => {
-    return apiFetch(`/printers/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  },
-};
-
-// Order Statuses API
-export const orderStatusesAPI = {
-  getAll: () => {
-    return apiFetch('/order-statuses');
-  },
-};
-
-// Materials API
-export const materialsAPI = {
-  getAll: () => {
-    return apiFetch('/materials');
-  },
-};
-
-// Orders API
-export const ordersAPI = {
-  getAll: () => {
-    return apiFetch('/orders');
+    return supabase
+      .from('printers')
+      .select('*')
+      .order('name');
   },
 
   getById: (id: number) => {
-    return apiFetch(`/orders/${id}`);
-  },
-
-  create: (data: any) => {
-    return apiFetch('/orders', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    return supabase
+      .from('printers')
+      .select('*')
+      .eq('id', id)
+      .single();
   },
 
   update: (id: number, data: any) => {
-    return apiFetch(`/orders/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
+    return supabase
+      .from('printers')
+      .update(data)
+      .eq('id', id)
+      .select()
+      .single();
   },
 };
 
-// Order History API
-export const orderHistoryAPI = {
-  getAll: (orderId?: number) => {
-    const query = orderId ? `?order_id=${orderId}` : '';
-    return apiFetch(`/order-history${query}`);
-  },
-};
-
-// Print Logs API
-export const printLogsAPI = {
+// Order Statuses API через Supabase
+export const orderStatusesAPI = {
   getAll: () => {
-    return apiFetch('/print-logs');
+    return supabase
+      .from('order_statuses')
+      .select('*')
+      .order('sort_order');
   },
 };
 
-// Views API
+// Materials API через Supabase
+export const materialsAPI = {
+  getAll: () => {
+    return supabase
+      .from('materials')
+      .select('*')
+      .order('name');
+  },
+};
+
+// Orders API через Supabase
+export const ordersAPI = {
+  getAll: () => {
+    return supabase
+      .from('orders')
+      .select(`
+        *,
+        client:persons!client_id(*),
+        manager:persons!manager_id(*),
+        status:order_statuses(*),
+        material:materials(*)
+      `)
+      .order('created_at', { ascending: false });
+  },
+
+  getById: (id: number) => {
+    return supabase
+      .from('orders')
+      .select(`
+        *,
+        client:persons!client_id(*),
+        manager:persons!manager_id(*),
+        status:order_statuses(*),
+        material:materials(*)
+      `)
+      .eq('id', id)
+      .single();
+  },
+
+  create: (data: any) => {
+    // Генерация номера заказа
+    const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    
+    return supabase
+      .from('orders')
+      .insert([{
+        ...data,
+        order_number: orderNumber,
+        created_at: new Date().toISOString(),
+        status_id: 1 // Новый статус
+      }])
+      .select()
+      .single();
+  },
+
+  update: (id: number, data: any) => {
+    return supabase
+      .from('orders')
+      .update(data)
+      .eq('id', id)
+      .select()
+      .single();
+  },
+
+  updateStatus: (id: number, statusId: number, userId: number) => {
+    return supabase
+      .from('orders')
+      .update({ 
+        status_id: statusId,
+        assigned_to: userId
+      })
+      .eq('id', id)
+      .select()
+      .single();
+  },
+};
+
+// Views API через Supabase
 export const viewsAPI = {
   getKanban: () => {
-    return apiFetch('/kanban-view');
+    return supabase
+      .from('kanban_view')
+      .select('*')
+      .order('sort_order')
+      .order('priority', { ascending: false })
+      .order('deadline');
   },
 
   getPrinters: () => {
-    return apiFetch('/printers-view');
+    return supabase
+      .from('printers_view')
+      .select('*');
   },
 
   getClients: () => {
-    return apiFetch('/clients-view');
+    return supabase
+      .from('clients_view')
+      .select('*');
   },
 };
+
+// Order History API через Supabase
+export const orderHistoryAPI = {
+  getAll: (orderId?: number) => {
+    let query = supabase
+      .from('order_history')
+      .select('*')
+      .order('changed_at', { ascending: false });
+    
+    if (orderId) {
+      query = query.eq('order_id', orderId);
+    }
+    
+    return query;
+  },
+};
+
+// Print Logs API через Supabase
+export const printLogsAPI = {
+  getAll: () => {
+    return supabase
+      .from('print_logs')
+      .select('*')
+      .order('started_at', { ascending: false });
+  },
+};
+
+// Экспорт для удобства
+export const API = {
+  auth: authAPI,
+  persons: personsAPI,
+  printers: printersAPI,
+  orders: ordersAPI,
+  orderStatuses: orderStatusesAPI,
+  materials: materialsAPI,
+  orderHistory: orderHistoryAPI,
+  printLogs: printLogsAPI,
+  views: viewsAPI,
+  supabase
+};
+
+export default API;
