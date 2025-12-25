@@ -5,19 +5,26 @@ publicAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 
 const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-ff36f543`;
 
-// Получаем токен из localStorage
-const getAuthToken = (): string | null => {
-  return localStorage.getItem('auth_token');
+// Получаем токен из localStorage - ДОБАВЬТЕ export
+export const getAuthToken = (): string | null => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('auth_token');
+  }
+  return null;
 };
 
 // Сохраняем токен
 export const setAuthToken = (token: string) => {
-  localStorage.setItem('auth_token', token);
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('auth_token', token);
+  }
 };
 
 // Удаляем токен
 export const removeAuthToken = () => {
-  localStorage.removeItem('auth_token');
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('auth_token');
+  }
 };
 
 // Базовый fetch с авторизацией
