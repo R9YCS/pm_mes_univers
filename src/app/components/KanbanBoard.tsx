@@ -41,7 +41,16 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange }) => {
     })
   });
 
-  const clientName = order.client?.full_name || order.client?.company_name || 'Неизвестный клиент';
+  const getClientName = () => {
+    // Проверяем все возможные варианты структуры данных
+    if (order.client_full_name) return order.client_full_name;
+    if (order.client_company) return order.client_company;
+    if (order.client?.full_name) return order.client.full_name;
+    if (order.client?.company_name) return order.client.company_name;
+    return 'Неизвестный клиент';
+  };
+  
+  const clientName = getClientName();
   const printerName = order.printer?.name;
   const urgency = order.urgency || 'normal';
 
