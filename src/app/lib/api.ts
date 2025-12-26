@@ -1,135 +1,97 @@
-// Обновленный api.ts для работы с RLS
+// API клиент для работы с backend
+import { projectId, publicAnonKey } from '../../utils/supabase/info';
 
-const supabaseUrl = 'https://rttikoxslnnifkizeref.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0dGlrb3hzbG5uaWZraXplcmVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2NjQ5NDMsImV4cCI6MjA4MjI0MDk0M30.A9PbLqhQaTApNPB8tcFTX3Gn4thGSS1Ch_exqZy28fc';
+const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-ff36f543`;
 
 // Получаем токен из localStorage
-export const getAuthToken = (): string | null => {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('supabase.auth.token');
-  }
-  return null;
+const getAuthToken = (): string | null => {
+  return localStorage.getItem('auth_token');
 };
 
-// Базовый fetch с поддержкой RLS
-const supabaseFetch = async (endpoint: string, options: RequestInit = {}) => {
+// Сохраняем токен
+export const setAuthToken = (token: string) => {
+  localStorage.setItem('auth_token', token);
+};
+
+// Удаляем токен
+export const removeAuthToken = () => {
+  localStorage.removeItem('auth_token');
+};
+
+// Базовый fetch с авторизацией
+const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
   const token = getAuthToken();
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    'apikey': supabaseAnonKey,
-    'Authorization': token ? `Bearer ${token}` : `Bearer ${supabaseAnonKey}`,
     ...options.headers,
   };
 
-  const url = `${supabaseUrl}/rest/v1${endpoint}`;
-  const response = await fetch(url, {
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers,
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(errorData.message || errorData.error || `HTTP error! status: ${response.status}`);
+    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
   }
 
   return response.json();
 };
 
-// Auth API через Supabase REST API
+// Auth API
 export const authAPI = {
   signup: async (data: { email: string; password: string; full_name: string; type?: string }) => {
-    const response = await fetch(`${supabaseUrl}/auth/v1/signup`, {
+    return apiFetch('/auth/signup', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': supabaseAnonKey,
-      },
-      body: JSON.stringify({
-        email: data.email,
-        password: data.password,
-        data: {
-          full_name: data.full_name,
-          type: data.type || 'employee'
-        }
-      }),
+      body: JSON.stringify(data),
     });
-
-    const result = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(result.msg || result.error || 'Signup failed');
-    }
-    
-    if (result.access_token) {
-      localStorage.setItem('supabase.auth.token', result.access_token);
-    }
-    
-    return result;
   },
 
   signin: async (email: string, password: string) => {
-    const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+    const data = await apiFetch('/auth/signin', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': supabaseAnonKey,
-      },
       body: JSON.stringify({ email, password }),
     });
-
-    const result = await response.json();
     
-    if (!response.ok) {
-      throw new Error(result.error_description || result.error || 'Signin failed');
+    if (data.session?.access_token) {
+      setAuthToken(data.session.access_token);
     }
     
-    if (result.access_token) {
-      localStorage.setItem('supabase.auth.token', result.access_token);
-    }
-    
-    return result;
+    return data;
   },
 
   signout: () => {
-    localStorage.removeItem('supabase.auth.token');
+    removeAuthToken();
   },
 };
 
 // Persons API
 export const personsAPI = {
   getAll: (type?: string) => {
-    let endpoint = '/persons?select=*&order=created_at.desc';
-    if (type) {
-      endpoint += `&type=eq.${type}`;
-    }
-    return supabaseFetch(endpoint);
+    const query = type ? `?type=${type}` : '';
+    return apiFetch(`/persons${query}`);
   },
 
   getById: (id: number) => {
-    return supabaseFetch(`/persons?id=eq.${id}`);
+    return apiFetch(`/persons/${id}`);
   },
 
   create: (data: any) => {
-    return supabaseFetch('/persons', {
+    return apiFetch('/persons', {
       method: 'POST',
-      body: JSON.stringify({
-        ...data,
-        created_at: new Date().toISOString(),
-        is_active: true
-      }),
-      headers: {
-        'Prefer': 'return=representation'
-      }
+      body: JSON.stringify(data),
     });
   },
 
   update: (id: number, data: any) => {
-    return supabaseFetch(`/persons?id=eq.${id}`, {
-      method: 'PATCH',
+    return apiFetch(`/persons/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(data),
-      headers: {
-        'Prefer': 'return=representation'
-      }
     });
   },
 };
@@ -137,30 +99,13 @@ export const personsAPI = {
 // Printers API
 export const printersAPI = {
   getAll: () => {
-    return supabaseFetch('/printers?select=*&order=name');
-  },
-
-  getById: (id: number) => {
-    return supabaseFetch(`/printers?id=eq.${id}`);
-  },
-
-  create: (data: any) => {
-    return supabaseFetch('/printers', {
-      method: 'POST',
-      body: JSON.stringify(data),
-      headers: {
-        'Prefer': 'return=representation'
-      }
-    });
+    return apiFetch('/printers');
   },
 
   update: (id: number, data: any) => {
-    return supabaseFetch(`/printers?id=eq.${id}`, {
-      method: 'PATCH',
+    return apiFetch(`/printers/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(data),
-      headers: {
-        'Prefer': 'return=representation'
-      }
     });
   },
 };
@@ -168,76 +113,45 @@ export const printersAPI = {
 // Order Statuses API
 export const orderStatusesAPI = {
   getAll: () => {
-    return supabaseFetch('/order_statuses?select=*&order=sort_order');
+    return apiFetch('/order-statuses');
   },
 };
 
 // Materials API
 export const materialsAPI = {
   getAll: () => {
-    return supabaseFetch('/materials?select=*&order=name');
-  },
-
-  getById: (id: number) => {
-    return supabaseFetch(`/materials?id=eq.${id}`);
-  },
-
-  create: (data: any) => {
-    return supabaseFetch('/materials', {
-      method: 'POST',
-      body: JSON.stringify(data),
-      headers: {
-        'Prefer': 'return=representation'
-      }
-    });
+    return apiFetch('/materials');
   },
 
   update: (id: number, data: any) => {
-    return supabaseFetch(`/materials?id=eq.${id}`, {
-      method: 'PATCH',
+    return apiFetch(`/materials/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(data),
-      headers: {
-        'Prefer': 'return=representation'
-      }
     });
   },
 };
 
 // Orders API
 export const ordersAPI = {
-  getAll: () => { // джоин персон и заказов
-    return supabaseFetch('/orders?select=*,client:persons!client_id(full_name,company_name,email,phone)&order=created_at.desc');
+  getAll: () => {
+    return apiFetch('/orders');
   },
 
   getById: (id: number) => {
-    return supabaseFetch(`/orders?id=eq.${id}`);
+    return apiFetch(`/orders/${id}`);
   },
 
   create: (data: any) => {
-    // Генерация номера заказа
-    const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    
-    return supabaseFetch('/orders', {
+    return apiFetch('/orders', {
       method: 'POST',
-      body: JSON.stringify({
-        ...data,
-        order_number: orderNumber,
-        created_at: new Date().toISOString(),
-        status_id: 1
-      }),
-      headers: {
-        'Prefer': 'return=representation'
-      }
+      body: JSON.stringify(data),
     });
   },
 
   update: (id: number, data: any) => {
-    return supabaseFetch(`/orders?id=eq.${id}`, {
-      method: 'PATCH',
+    return apiFetch(`/orders/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(data),
-      headers: {
-        'Prefer': 'return=representation'
-      }
     });
   },
 };
@@ -245,39 +159,29 @@ export const ordersAPI = {
 // Order History API
 export const orderHistoryAPI = {
   getAll: (orderId?: number) => {
-    let endpoint = '/order_history?select=*&order=changed_at.desc';
-    if (orderId) {
-      endpoint += `&order_id=eq.${orderId}`;
-    }
-    return supabaseFetch(endpoint);
+    const query = orderId ? `?order_id=${orderId}` : '';
+    return apiFetch(`/order-history${query}`);
   },
 };
 
 // Print Logs API
 export const printLogsAPI = {
   getAll: () => {
-    return supabaseFetch('/print_logs?select=*&order=started_at.desc');
+    return apiFetch('/print-logs');
   },
 };
 
-// Printer Maintenance API
-export const printerMaintenanceAPI = {
-  getAll: () => {
-    return supabaseFetch('/printer_maintenance?select=*&order=performed_at.desc');
+// Views API
+export const viewsAPI = {
+  getKanban: () => {
+    return apiFetch('/kanban-view');
+  },
+
+  getPrinters: () => {
+    return apiFetch('/printers-view');
+  },
+
+  getClients: () => {
+    return apiFetch('/clients-view');
   },
 };
-
-// Экспорт всех API
-export const API = {
-  auth: authAPI,
-  persons: personsAPI,
-  printers: printersAPI,
-  orders: ordersAPI,
-  orderStatuses: orderStatusesAPI,
-  materials: materialsAPI,
-  orderHistory: orderHistoryAPI,
-  printLogs: printLogsAPI,
-  printerMaintenance: printerMaintenanceAPI,
-};
-
-export default API;
