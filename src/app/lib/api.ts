@@ -258,7 +258,7 @@ export const materialsAPI = {
 // Orders API
 export const ordersAPI = {
   getAll: () => {
-    return restFetch('/orders?select=*&order=created_at.desc');
+    return supabaseFetch('/orders?select=*,client:persons!client_id(full_name,company_name,email,phone)&order=created_at.desc');
   },
 
   getById: (id: number) => {
