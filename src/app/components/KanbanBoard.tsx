@@ -42,7 +42,22 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, onEdit }) 
     })
   });
 
-  const clientName = order.client?.full_name || order.client?.company_name || 'Неизвестный клиент';
+  const getClientName = () => {
+    if (order.client) {
+      // Если данные клиента пришли с JOIN
+      return order.client.full_name || order.client.company_name || 'Неизвестный клиент';
+    }
+    
+    // Если в orders нет client объекта, но есть client_id
+    if (order.client_id) {
+      // Можно добавить поиск в списке clients, если он передан
+      return `Клиент #${order.client_id}`;
+    }
+    
+    return 'Неизвестный клиент';
+  };
+
+  const clientName = getClientName();
   const printerName = order.printer?.name;
   const urgency = order.urgency || 'normal';
 
