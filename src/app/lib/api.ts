@@ -1,10 +1,12 @@
 // API клиент для работы с backend
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 
-const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-ff36f543`;
+const SUPABASE_URL = `https://${projectId}.supabase.co`;
+const SUPABASE_REST_URL = `${SUPABASE_URL}/rest/v1`;
+const SUPABASE_AUTH_URL = `${SUPABASE_URL}/auth/v1`;
 
 // Получаем токен из localStorage
-export const getAuthToken = (): string | null => {  // <-- Добавлен export
+export const getAuthToken = (): string | null => {
   return localStorage.getItem('auth_token');
 };
 
@@ -18,19 +20,44 @@ export const removeAuthToken = () => {
   localStorage.removeItem('auth_token');
 };
 
-// Базовый fetch с авторизацией
-const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
+// Базовый fetch для REST API
+const restFetch = async (endpoint: string, options: RequestInit = {}) => {
   const token = getAuthToken();
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
+    'apikey': publicAnonKey,
+    'Authorization': `Bearer ${token || publicAnonKey}`,
+    'Prefer': 'return=representation', // для получения данных после INSERT/UPDATE
     ...options.headers,
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetch(`${SUPABASE_REST_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  // Для DELETE запросов может не быть тела
+  if (options.method === 'DELETE' && response.status === 204) {
+    return { success: true };
+  }
+
+  return response.json();
+};
+
+// Базовый fetch для Auth API
+const authFetch = async (endpoint: string, options: RequestInit = {}) => {
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    'apikey': publicAnonKey,
+    ...options.headers,
+  };
+
+  const response = await fetch(`${SUPABASE_AUTH_URL}${endpoint}`, {
     ...options,
     headers,
   });
@@ -43,23 +70,43 @@ const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
   return response.json();
 };
 
-// Auth API
+// Auth API - используем прямой доступ к Supabase Auth
 export const authAPI = {
   signup: async (data: { email: string; password: string; full_name: string; type?: string }) => {
-    return apiFetch('/auth/signup', {
+    // Создаем пользователя в Supabase Auth
+    const authResponse = await authFetch('/signup', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        email: data.email,
+        password: data.password,
+        data: { full_name: data.full_name, type: data.type }
+      }),
     });
+
+    // Создаем запись в таблице persons
+    if (authResponse.user) {
+      await restFetch('/persons', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: data.email,
+          full_name: data.full_name,
+          type: data.type || 'user',
+          auth_id: authResponse.user.id
+        }),
+      });
+    }
+
+    return authResponse;
   },
 
   signin: async (email: string, password: string) => {
-    const data = await apiFetch('/auth/signin', {
+    const data = await authFetch('/token?grant_type=password', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
     
-    if (data.session?.access_token) {
-      setAuthToken(data.session.access_token);
+    if (data.access_token) {
+      setAuthToken(data.access_token);
     }
     
     return data;
@@ -73,24 +120,24 @@ export const authAPI = {
 // Persons API
 export const personsAPI = {
   getAll: (type?: string) => {
-    const query = type ? `?type=${type}` : '';
-    return apiFetch(`/persons${query}`);
+    const query = type ? `?type=eq.${type}` : '';
+    return restFetch(`/persons${query}&select=*&order=created_at.desc`);
   },
 
   getById: (id: number) => {
-    return apiFetch(`/persons/${id}`);
+    return restFetch(`/persons?id=eq.${id}&select=*`);
   },
 
   create: (data: any) => {
-    return apiFetch('/persons', {
+    return restFetch('/persons', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
   update: (id: number, data: any) => {
-    return apiFetch(`/persons/${id}`, {
-      method: 'PUT',
+    return restFetch(`/persons?id=eq.${id}`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
     });
   },
@@ -99,12 +146,19 @@ export const personsAPI = {
 // Printers API
 export const printersAPI = {
   getAll: () => {
-    return apiFetch('/printers');
+    return restFetch('/printers?select=*&order=name');
+  },
+
+  create: (data: any) => {
+    return restFetch('/printers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 
   update: (id: number, data: any) => {
-    return apiFetch(`/printers/${id}`, {
-      method: 'PUT',
+    return restFetch(`/printers?id=eq.${id}`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
     });
   },
@@ -113,19 +167,26 @@ export const printersAPI = {
 // Order Statuses API
 export const orderStatusesAPI = {
   getAll: () => {
-    return apiFetch('/order-statuses');
+    return restFetch('/order_statuses?select=*&order=id');
   },
 };
 
 // Materials API
 export const materialsAPI = {
   getAll: () => {
-    return apiFetch('/materials');
+    return restFetch('/materials?select=*&order=name');
+  },
+
+  create: (data: any) => {
+    return restFetch('/materials', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 
   update: (id: number, data: any) => {
-    return apiFetch(`/materials/${id}`, {
-      method: 'PUT',
+    return restFetch(`/materials?id=eq.${id}`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
     });
   },
@@ -134,23 +195,23 @@ export const materialsAPI = {
 // Orders API
 export const ordersAPI = {
   getAll: () => {
-    return apiFetch('/orders');
+    return restFetch('/orders?select=*&order=created_at.desc');
   },
 
   getById: (id: number) => {
-    return apiFetch(`/orders/${id}`);
+    return restFetch(`/orders?id=eq.${id}&select=*`);
   },
 
   create: (data: any) => {
-    return apiFetch('/orders', {
+    return restFetch('/orders', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
   update: (id: number, data: any) => {
-    return apiFetch(`/orders/${id}`, {
-      method: 'PUT',
+    return restFetch(`/orders?id=eq.${id}`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
     });
   },
@@ -159,29 +220,30 @@ export const ordersAPI = {
 // Order History API
 export const orderHistoryAPI = {
   getAll: (orderId?: number) => {
-    const query = orderId ? `?order_id=${orderId}` : '';
-    return apiFetch(`/order-history${query}`);
+    const query = orderId ? `?order_id=eq.${orderId}` : '';
+    return restFetch(`/order_history${query}&select=*&order=created_at.desc`);
   },
 };
 
 // Print Logs API
 export const printLogsAPI = {
   getAll: () => {
-    return apiFetch('/print-logs');
+    return restFetch('/print_logs?select=*&order=created_at.desc');
   },
 };
 
-// Views API
+// Views API - оставляем через функции если нужно, или переделываем на прямые запросы
 export const viewsAPI = {
   getKanban: () => {
-    return apiFetch('/kanban-view');
+    // Если есть материализованное представление
+    return restFetch('/kanban_view?select=*');
   },
 
   getPrinters: () => {
-    return apiFetch('/printers-view');
+    return restFetch('/printers_view?select=*');
   },
 
   getClients: () => {
-    return apiFetch('/clients-view');
+    return restFetch('/clients_view?select=*');
   },
 };
