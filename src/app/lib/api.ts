@@ -257,41 +257,33 @@ export const materialsAPI = {
 
 // Orders API
 export const ordersAPI = {
-  getAll: () => { // джоин персон и заказов
-    return supabaseFetch('/orders?select=*,client:persons!client_id(full_name,company_name,email,phone)&order=created_at.desc');
+  getAll: () => {
+    return restFetch('/orders?select=*&order=created_at.desc');
   },
 
   getById: (id: number) => {
-    return supabaseFetch(`/orders?id=eq.${id}`);
+    return restFetch(`/orders?id=eq.${id}&select=*`);
   },
 
   create: (data: any) => {
-    // Генерация номера заказа
-    const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    
-    return supabaseFetch('/orders', {
+    return restFetch('/orders', {
       method: 'POST',
-      body: JSON.stringify({
-        ...data,
-        order_number: orderNumber,
-        created_at: new Date().toISOString(),
-        status_id: 1
-      }),
-      headers: {
-        'Prefer': 'return=representation'
-      }
+      body: JSON.stringify(data),
     });
   },
 
   update: (id: number, data: any) => {
-    return supabaseFetch(`/orders?id=eq.${id}`, {
+    return restFetch(`/orders?id=eq.${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
-      headers: {
-        'Prefer': 'return=representation'
-      }
     });
   },
+
+  delete: (id: number) => {
+    return restFetch(`/orders?id=eq.${id}`, {
+      method: 'DELETE',
+    });
+  }
 };
 
 // Order History API
