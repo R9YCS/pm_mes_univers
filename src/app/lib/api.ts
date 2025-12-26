@@ -257,33 +257,41 @@ export const materialsAPI = {
 
 // Orders API
 export const ordersAPI = {
-  getAll: () => {
+  getAll: () => { // джоин персон и заказов
     return supabaseFetch('/orders?select=*,client:persons!client_id(full_name,company_name,email,phone)&order=created_at.desc');
   },
 
   getById: (id: number) => {
-    return restFetch(`/orders?id=eq.${id}&select=*`);
+    return supabaseFetch(`/orders?id=eq.${id}`);
   },
 
   create: (data: any) => {
-    return restFetch('/orders', {
+    // Генерация номера заказа
+    const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    
+    return supabaseFetch('/orders', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        ...data,
+        order_number: orderNumber,
+        created_at: new Date().toISOString(),
+        status_id: 1
+      }),
+      headers: {
+        'Prefer': 'return=representation'
+      }
     });
   },
 
   update: (id: number, data: any) => {
-    return restFetch(`/orders?id=eq.${id}`, {
+    return supabaseFetch(`/orders?id=eq.${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
+      headers: {
+        'Prefer': 'return=representation'
+      }
     });
   },
-
-  delete: (id: number) => {
-    return restFetch(`/orders?id=eq.${id}`, {
-      method: 'DELETE',
-    });
-  }
 };
 
 // Order History API
