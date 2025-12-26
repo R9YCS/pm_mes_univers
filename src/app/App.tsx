@@ -7,8 +7,9 @@ import { PrintersMonitor } from './components/PrintersMonitor';
 import { ClientsDatabase } from './components/ClientsDatabase';
 import { UsersManagement } from './components/UsersManagement';
 import { OrderHistory } from './components/OrderHistory';
+import { MaterialsWarehouse } from './components/MaterialsWarehouse';
 import { Toaster } from './components/ui/sonner';
-import { LayoutGrid, Printer as PrinterIcon, Users, Shield, History, LogOut } from 'lucide-react';
+import { LayoutGrid, Printer as PrinterIcon, Users, Shield, History, LogOut, Package } from 'lucide-react';
 import { authAPI, ordersAPI, printersAPI, personsAPI, orderStatusesAPI, materialsAPI } from './lib/api';
 import { getAuthToken } from './lib/api';
 import { toast } from 'sonner';
@@ -163,7 +164,7 @@ export default function App() {
       {/* Основной контент */}
       <main className="p-6">
         <Tabs defaultValue="kanban" className="space-y-6">
-          <TabsList className="grid w-full max-w-5xl grid-cols-5">
+          <TabsList className="grid w-full max-w-6xl grid-cols-6">
             <TabsTrigger value="kanban" className="gap-2">
               <LayoutGrid className="w-4 h-4" />
               Доска заказов
@@ -171,6 +172,10 @@ export default function App() {
             <TabsTrigger value="printers" className="gap-2">
               <PrinterIcon className="w-4 h-4" />
               Принтеры
+            </TabsTrigger>
+            <TabsTrigger value="warehouse" className="gap-2">
+              <Package className="w-4 h-4" />
+              Склад
             </TabsTrigger>
             <TabsTrigger value="clients" className="gap-2">
               <Users className="w-4 h-4" />
@@ -208,13 +213,29 @@ export default function App() {
             <div>
               <h2>Панель мониторинга 3D-принтеров</h2>
               <p className="text-gray-600 mt-1">
-                Контроль состояния оборудования и планирование загрузки
+                Контроль состояния оборудования и управление заданиями
               </p>
             </div>
             <PrintersMonitor
               printers={printers}
               orders={orders}
+              materials={materials}
               onUpdatePrinter={handleUpdatePrinter}
+              onUpdateOrder={handleUpdateOrder}
+              onRefresh={loadData}
+            />
+          </TabsContent>
+
+          <TabsContent value="warehouse" className="space-y-4">
+            <div>
+              <h2>Склад материалов</h2>
+              <p className="text-gray-600 mt-1">
+                Управление запасами материалов для 3D-печати
+              </p>
+            </div>
+            <MaterialsWarehouse
+              materials={materials}
+              onRefresh={loadData}
             />
           </TabsContent>
 

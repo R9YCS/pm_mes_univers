@@ -212,6 +212,103 @@ app.get("/make-server-ff36f543/materials", requireAuth, async (c) => {
   }
 });
 
+app.post("/make-server-ff36f543/materials", requireAuth, async (c) => {
+  try {
+    const body = await c.req.json();
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+    
+    const { data, error } = await supabase
+      .from('mes_minimal.materials')
+      .insert(body)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return c.json(data);
+  } catch (error) {
+    console.error('Create material error:', error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+app.put("/make-server-ff36f543/materials/:id", requireAuth, async (c) => {
+  try {
+    const id = parseInt(c.req.param('id'));
+    const body = await c.req.json();
+    
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+    
+    const { data, error } = await supabase
+      .from('mes_minimal.materials')
+      .update(body)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return c.json(data);
+  } catch (error) {
+    console.error('Update material error:', error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// ========== PRINTERS CREATE ENDPOINT ==========
+
+app.post("/make-server-ff36f543/printers", requireAuth, async (c) => {
+  try {
+    const body = await c.req.json();
+    
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+    
+    const { data, error } = await supabase
+      .from('mes_minimal.printers')
+      .insert(body)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return c.json(data);
+  } catch (error) {
+    console.error('Create printer error:', error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// ========== PRINT LOGS CREATE ENDPOINT ==========
+
+app.post("/make-server-ff36f543/print-logs", requireAuth, async (c) => {
+  try {
+    const body = await c.req.json();
+    
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+    
+    const { data, error } = await supabase
+      .from('mes_minimal.print_logs')
+      .insert(body)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return c.json(data);
+  } catch (error) {
+    console.error('Create print log error:', error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
 // ========== ORDERS ENDPOINTS ==========
 
 app.get("/make-server-ff36f543/orders", requireAuth, async (c) => {
