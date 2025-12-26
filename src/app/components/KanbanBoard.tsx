@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
-import { Plus, Search, Calendar } from 'lucide-react';
+import { Plus, Search, Calendar, Edit } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface KanbanBoardProps {
@@ -30,9 +30,10 @@ const urgencyConfig: Record<string, { label: string; color: string }> = {
 interface OrderCardProps {
   order: any;
   onStatusChange: (orderId: number, newStatusId: number) => void;
+  onEdit: (order: any) => void;
 }
 
-const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange }) => {
+const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, onEdit }) => {
   const [{ isDragging }, drag] = useDrag({
     type: 'order',
     item: { id: order.id, currentStatusId: order.status_id },
@@ -40,24 +41,8 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange }) => {
       isDragging: monitor.isDragging()
     })
   });
-  
-  // Получаем имя клиента из связанных данных
-  const getClientName = () => {
-    if (order.client) {
-      // Если данные клиента пришли с JOIN
-      return order.client.full_name || order.client.company_name || 'Неизвестный клиент';
-    }
-    
-    // Если в orders нет client объекта, но есть client_id
-    if (order.client_id) {
-      // Можно добавить поиск в списке clients, если он передан
-      return `Клиент #${order.client_id}`;
-    }
-    
-    return 'Неизвестный клиент';
-  };
 
-  const clientName = getClientName();
+  const clientName = order.client?.full_name || order.client?.company_name || 'Неизвестный клиент';
   const printerName = order.printer?.name;
   const urgency = order.urgency || 'normal';
 
@@ -67,13 +52,32 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange }) => {
       className={`p-4 bg-white border rounded-lg shadow-sm cursor-move hover:shadow-md transition-shadow ${
         isDragging ? 'opacity-50' : ''
       }`}
+      onClick={(e) => {
+        // Если клик не на drag области, открываем редактирование
+        if (e.detail === 2) { // двойной клик
+          onEdit(order);
+        }
+      }}
     >
       <div className="flex items-start justify-between mb-2">
         <span className="text-sm text-gray-600">{order.order_number}</span>
-        <div 
-          className={`w-3 h-3 rounded-full ${urgencyConfig[urgency].color}`} 
-          title={urgencyConfig[urgency].label} 
-        />
+        <div className="flex items-center gap-2">
+          <div 
+            className={`w-3 h-3 rounded-full ${urgencyConfig[urgency].color}`} 
+            title={urgencyConfig[urgency].label} 
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(order);
+            }}
+          >
+            <Edit className="w-3 h-3" />
+          </Button>
+        </div>
       </div>
       
       <h4 className="mb-1">{clientName}</h4>
@@ -97,6 +101,13 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange }) => {
           {order.material.name}
         </div>
       )}
+
+      {/* Показываем время, вес, стоимость если есть */}
+      <div className="mt-2 flex gap-2 text-xs text-gray-500 flex-wrap">
+        {order.estimated_time && <span>⏱ {order.estimated_time} мин</span>}
+        {order.estimated_weight && <span>⚖ {order.estimated_weight} г</span>}
+        {order.estimated_cost && <span>💰 {order.estimated_cost} ₽</span>}
+      </div>
     </div>
   );
 };
@@ -105,9 +116,10 @@ interface ColumnProps {
   status: any;
   orders: any[];
   onDrop: (orderId: number, newStatusId: number) => void;
+  onEdit: (order: any) => void;
 }
 
-const Column: React.FC<ColumnProps> = ({ status, orders, onDrop }) => {
+const Column: React.FC<ColumnProps> = ({ status, orders, onDrop, onEdit }) => {
   const [{ isOver }, drop] = useDrop({
     accept: 'order',
     drop: (item: { id: number; currentStatusId: number }) => {
@@ -145,10 +157,223 @@ const Column: React.FC<ColumnProps> = ({ status, orders, onDrop }) => {
             key={order.id} 
             order={order} 
             onStatusChange={onDrop}
+            onEdit={onEdit}
           />
         ))}
       </div>
     </div>
+  );
+};
+
+// Диалог редактирования заказа
+const EditOrderDialog: React.FC<{
+  order: any | null;
+  clients: any[];
+  materials: any[];
+  open: boolean;
+  onClose: () => void;
+  onSave: (orderId: number, updates: any) => void;
+}> = ({ order, clients, materials, open, onClose, onSave }) => {
+  const [formData, setFormData] = useState<any>({});
+
+  React.useEffect(() => {
+    if (order) {
+      setFormData({
+        client_id: order.client_id,
+        name: order.name || '',
+        description: order.description || '',
+        priority: order.priority || 3,
+        urgency: order.urgency || 'normal',
+        material_id: order.material_id || '',
+        estimated_time: order.estimated_time || '',
+        estimated_weight: order.estimated_weight || '',
+        estimated_cost: order.estimated_cost || '',
+        deadline: order.deadline ? order.deadline.split('T')[0] : '',
+        notes: order.notes || ''
+      });
+    }
+  }, [order]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.name) {
+      toast.error('Укажите название заказа');
+      return;
+    }
+
+    onSave(order.id, {
+      client_id: parseInt(formData.client_id),
+      name: formData.name,
+      description: formData.description || undefined,
+      priority: formData.priority,
+      urgency: formData.urgency,
+      material_id: formData.material_id ? parseInt(formData.material_id) : undefined,
+      estimated_time: formData.estimated_time ? parseInt(formData.estimated_time) : undefined,
+      estimated_weight: formData.estimated_weight ? parseFloat(formData.estimated_weight) : undefined,
+      estimated_cost: formData.estimated_cost ? parseFloat(formData.estimated_cost) : undefined,
+      deadline: formData.deadline || undefined,
+      notes: formData.notes || undefined
+    });
+
+    onClose();
+  };
+
+  if (!order) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Редактирование заказа: {order.order_number}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="edit-client">Клиент *</Label>
+              <Select value={String(formData.client_id)} onValueChange={(value) => setFormData({ ...formData, client_id: value })}>
+                <SelectTrigger id="edit-client">
+                  <SelectValue placeholder="Выберите клиента" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map(client => (
+                    <SelectItem key={client.id} value={String(client.id)}>
+                      {client.full_name || client.company_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="edit-name">Название заказа *</Label>
+              <Input 
+                id="edit-name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="edit-description">Описание</Label>
+              <Textarea 
+                id="edit-description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={2}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-priority">Приоритет (1-5)</Label>
+              <Input 
+                id="edit-priority"
+                type="number"
+                min="1"
+                max="5"
+                value={formData.priority}
+                onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 3 })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-urgency">Срочность</Label>
+              <Select value={formData.urgency} onValueChange={(value) => setFormData({ ...formData, urgency: value })}>
+                <SelectTrigger id="edit-urgency">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(urgencyConfig).map(([key, config]) => (
+                    <SelectItem key={key} value={key}>{config.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-material">Материал</Label>
+              <Select value={String(formData.material_id)} onValueChange={(value) => setFormData({ ...formData, material_id: value })}>
+                <SelectTrigger id="edit-material">
+                  <SelectValue placeholder="Выберите материал" />
+                </SelectTrigger>
+                <SelectContent>
+                  {materials.map(material => (
+                    <SelectItem key={material.id} value={String(material.id)}>
+                      {material.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-deadline">Срок сдачи</Label>
+              <Input 
+                id="edit-deadline"
+                type="date"
+                value={formData.deadline}
+                onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+              />
+            </div>
+
+            {/* Новые поля: время, вес, стоимость */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-time">Ориентировочное время (мин)</Label>
+              <Input 
+                id="edit-time"
+                type="number"
+                value={formData.estimated_time}
+                onChange={(e) => setFormData({ ...formData, estimated_time: e.target.value })}
+                placeholder="120"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-weight">Ориентировочный вес (г)</Label>
+              <Input 
+                id="edit-weight"
+                type="number"
+                step="0.1"
+                value={formData.estimated_weight}
+                onChange={(e) => setFormData({ ...formData, estimated_weight: e.target.value })}
+                placeholder="50.5"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-cost">Ориентировочная стоимость (₽)</Label>
+              <Input 
+                id="edit-cost"
+                type="number"
+                step="0.01"
+                value={formData.estimated_cost}
+                onChange={(e) => setFormData({ ...formData, estimated_cost: e.target.value })}
+                placeholder="1500.00"
+              />
+            </div>
+
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="edit-notes">Примечания</Label>
+              <Textarea 
+                id="edit-notes"
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                rows={2}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Отмена
+            </Button>
+            <Button type="submit">
+              Сохранить
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 };
 
@@ -345,6 +570,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [urgencyFilter, setUrgencyFilter] = useState<string>('all');
+  const [editingOrder, setEditingOrder] = useState<any | null>(null);
 
   const handleDrop = (orderId: number, newStatusId: number) => {
     onUpdateOrder(orderId, { status_id: newStatusId });
@@ -426,9 +652,20 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 status={status}
                 orders={filteredOrders.filter(order => order.status_id === status.id)}
                 onDrop={handleDrop}
+                onEdit={setEditingOrder}
               />
             ))}
         </div>
+
+        {/* Диалог редактирования */}
+        <EditOrderDialog
+          order={editingOrder}
+          clients={clients}
+          materials={materials}
+          open={!!editingOrder}
+          onClose={() => setEditingOrder(null)}
+          onSave={onUpdateOrder}
+        />
       </div>
     </DndProvider>
   );
